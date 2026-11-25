@@ -55,7 +55,7 @@ function point(e){
 }
 function beginDrag(e,slot){
   if(!fight||fight.paused||drag)return;
-  fight.slot=slot;drag={slot,id:e.pointerId,...point(e)};
+  e.preventDefault();fight.slot=slot;drag={slot,id:e.pointerId,...point(e)};
   e.currentTarget.setPointerCapture(e.pointerId);hud();
 }
 window.addEventListener('pointermove',e=>{if(drag&&drag.id===e.pointerId)Object.assign(drag,point(e));});
