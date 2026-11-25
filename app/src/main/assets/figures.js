@@ -188,6 +188,7 @@ const Figures = (() => {
     ctx.putImageData(img,0,0);return canvas;
   }
   function draw(c,u,time,size){
+    if(FighterArt.draw(c,u,time,size))return;
     const dir=((Math.round((u.heading??(u.team?0:Math.PI))*16/TAU)%16)+16)%16;
     let mode='idle',phase=0;
     if(u.attack>0){mode='strike';phase=1-u.attack/.23;}

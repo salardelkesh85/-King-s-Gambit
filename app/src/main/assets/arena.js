@@ -225,7 +225,7 @@ function render(){
     c.globalAlpha=o.spawn>0?.5:1;
     if(animated){
       if(o.flash>.09)c.translate(-px*.075,0);
-      Figures.draw(c,o,f.elapsed,size*1.16);
+      Figures.draw(c,o,f.elapsed,size*1.04);
     }else if(o.team && o.id!=='windcatcher' && sprites.opponents.naturalWidth){
       const idx=tower?(o.lane===2?9:8):starters.indexOf(o.id);
       c.drawImage(sprites.opponents,(idx%5)*152,Math.floor(idx/5)*160,152,160,-width/2,-height,width,height);
@@ -241,7 +241,8 @@ function render(){
   if(drag&&drag.y<=H){
     const id=f.hands[0][drag.slot];const valid=legal(0,id,drag)&&f.mana[0]>=troops[id][0];
     c.strokeStyle=valid?'#e9ffff':'#ff4859';c.lineWidth=3;c.beginPath();c.ellipse(drag.x*px,drag.y*py,px*(isSpell(id)?3.1:1),py*(isSpell(id)?3.1:.55),0,0,Math.PI*2);c.stroke();
-    const ghost=sprites['piece-'+id];if(ghost?.naturalWidth){c.globalAlpha=.65;c.drawImage(ghost,(drag.x-1)*px,drag.y*py-2.5*px,2*px,2.5*px);c.globalAlpha=1;}
+    if(starters.includes(id)){c.save();c.translate(drag.x*px,drag.y*py);c.globalAlpha=.65;Figures.draw(c,{id,team:0,phase:0},f.elapsed,px*3);c.restore();}
+    else {const ghost=sprites['piece-'+id];if(ghost?.naturalWidth){c.globalAlpha=.65;c.drawImage(ghost,(drag.x-1)*px,drag.y*py-2.5*px,2*px,2.5*px);c.globalAlpha=1;}}
   }
   if(f.elapsed<f.noticeUntil){c.font='bold 13px system-ui';c.textAlign='center';const tw=c.measureText(f.notice).width;c.fillStyle='#24182ce8';c.fillRect((w-tw)/2-10,h-25,tw+20,22);c.fillStyle='#fff2ce';c.fillText(f.notice,w/2,h-10);}
 }
