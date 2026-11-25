@@ -63,6 +63,7 @@ function combatStep(actor,dt){
     if(!structure(actor))move(actor,target,dt);
     return;
   }
+  if(!structure(actor)&&Math.abs(target.x-actor.x)>.2)actor.face=Math.sign(target.x-actor.x);
   if(actor.cd>0)return;
   actor.wind=(actor.wind||0)+dt;
   if(actor.wind>=tacticsFor(actor).windup){attack(actor,target);actor.wind=0;}
