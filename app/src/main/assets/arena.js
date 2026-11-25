@@ -13,7 +13,7 @@ function teamColor(team){return team?'#ff5261':'#35d9ff';}
 let canvas, pen, drag, hudKey='';
 function start(drill=false){
   BattleAudio.open();
-  screen='Battle';drag=null;hudKey='';nav.style.display='none';
+  screen='Battle';bar.className='combatbar';drag=null;hudKey='';nav.style.display='none';
   bar.innerHTML='<button id="pause" aria-label="Pause">Ⅱ</button><button id="audio" aria-label="Battle sound"></button><strong id="clock">3:00</strong><b id="crowns"></b>';
   main.innerHTML='<section class="battle"><div class="field"><canvas class="board" aria-label="Battle arena"></canvas></div><div class="command"><div class="handrow"><aside><small>NEXT</small><img id="next" alt="Next card"></aside><div id="hand"></div></div><div class="fuel"><b id="charge"></b><div class="track"><i></i></div><span id="rate"></span></div></div></section>';
   canvas=main.querySelector('canvas');pen=canvas.getContext('2d');
@@ -95,17 +95,24 @@ function hit(t,damage){
   if(t.lane===2 || (t.lane!==undefined&&!t.hp))fight.towers.find(k=>k.team===t.team&&k.lane===2).awake=true;
   if(!t.hp){burst(t,t.lane===undefined?'#fff0a4':'#eea45e',t.lane===undefined?.8:2.7);if(t.lane!==undefined){BattleAudio.play('collapse',t.x);notice('Tower down!');}}
 }
-function crowns(team){return fight.towers.filter(t=>t.team!==team&&t.hp<=0).length;}
+function crowns(team){
+  const enemy=fight.towers.filter(t=>t.team!==team);
+  return enemy.some(t=>t.lane===2&&t.hp<=0)?3:enemy.filter(t=>t.hp<=0).length;
+}
 function route(u,target){
   if(u.id==='falcon')return target;
-  const side=u.team?1:-1;
-  const near=16-side*(bank+.16), far=16+side*(bank+.16);
-  if((target.y-16)*side>bank && (u.y-far)*side<0){
-    if((u.y-near)*side<-.07)return {x:u.bridge,y:near};
+  const direction=Math.sign(target.y-u.y);
+  const near=16-direction*(bank+.16),far=16+direction*(bank+.16);
+  if(direction && (target.y-16)*direction>bank && (far-u.y)*direction>.02){
+    if((near-u.y)*direction>.05){
+      // Select the bridge from the current positions, including a retreat across the river.
+      const cost=x=>Math.hypot(x-u.x,near-u.y)+Math.hypot(x-target.x,far-target.y);
+      u.bridge=cost(bridges[0])<=cost(bridges[1])?bridges[0]:bridges[1];
+      return {x:u.bridge,y:near};
+    }
+    if(Math.abs(u.x-u.bridge)>.6 && Math.abs(u.y-16)>bank)return {x:u.bridge,y:u.y};
     return {x:u.bridge,y:far};
   }
-  // A defending troop may turn back toward a target across the water.
-  if((u.y-16)*(target.y-16)<0&&Math.abs(u.x-u.bridge)>.7)return {x:u.bridge,y:u.y};
   return target;
 }
 function move(u,target,dt){
@@ -154,8 +161,7 @@ function tick(dt){
   f.effects.forEach(e=>e.life-=dt);f.effects=f.effects.filter(e=>e.life>0);
   if(f.drill&&!f.units.some(u=>u.team&&u.id==='ram'&&u.hp>0)){finish(0);return;}
   const result=crowns(0)-crowns(1);
-  const deadKing=f.towers.find(t=>t.lane===2&&!t.hp);
-  if(deadKing){finish(deadKing.team?1:-1);return;}
+  if(f.towers.some(t=>t.lane===2&&!t.hp)){finish(Math.sign(result));return;}
   if((f.overtime||f.time<=0)&&result){finish(Math.sign(result));return;}
   if(f.time<=0){if(f.overtime){const lowest=team=>Math.min(...f.towers.filter(t=>t.hp>0&&t.team===team).map(t=>t.hp));finish(Math.sign(lowest(0)-lowest(1)));}else{f.overtime=true;f.time=60;notice('Sudden death');}}
 }
