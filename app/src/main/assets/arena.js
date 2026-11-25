@@ -125,6 +125,7 @@ function move(u,target,dt){
   const oldX=u.x,oldY=u.y;
   u.x=clamp(u.x+dx,1.2,16.8);u.y=clamp(u.y+dy,1,31);
   if(u.id!=='falcon'&&Math.abs(u.y-16)<=bank)u.x=clamp(u.x,u.bridge-.59,u.bridge+.59);
+  Figures.turn(u,u.x-oldX,u.y-oldY,dt);
   u.travel=(u.travel||0)+Math.hypot(u.x-oldX,u.y-oldY);
   if(Math.abs(dx)>.001)u.face=dx>0?1:-1;u.moving=true;
 }
@@ -150,7 +151,7 @@ function tick(dt){
       burst(s.t,s.id==='spark'?'#ffb24c':'#a5f5ff',s.id==='spark'?1.4:.6);
     }else{s.x+=(s.t.x-s.x)*step/d;s.y+=(s.t.y-s.y)*step/d;}
   }
-  for(const u of f.units)if(u.hp<=0 && clips[u.id])f.fallen.push({...u,fallAt:f.elapsed});
+  for(const u of f.units)if(u.hp<=0 && starters.includes(u.id))f.fallen.push({...u,fallAt:f.elapsed});
   f.fallen=f.fallen.filter(u=>f.elapsed-u.fallAt<.33);
   f.units=f.units.filter(u=>u.hp>0);f.shots=f.shots.filter(s=>!s.done);
   f.effects.forEach(e=>e.life-=dt);f.effects=f.effects.filter(e=>e.life>0);
@@ -201,10 +202,10 @@ function render(){
   for(const o of [...f.units,...f.fallen,...f.towers].sort((a,b)=>a.y-b.y)){
     const x=o.x*px,y=o.y*py,tower=o.lane!==undefined;
     if(o.fallAt!==undefined){
-      const sheet=clips[o.id];if(!sheet.naturalWidth)continue;
+      
       const t=(f.elapsed-o.fallAt)/.33;
-      c.save();c.translate(x,y);c.scale(o.face,1-t*.65);c.rotate(-t*.9);c.globalAlpha=1-t;
-      paintFighter(c,o,7,px*2.6);c.restore();continue;
+      c.save();c.translate(x,y);c.scale(1,1-t*.65);c.rotate(-t*.9);c.globalAlpha=1-t;
+      Figures.draw(c,o,f.elapsed,px*3);c.restore();continue;
     }
     if(o.hp<=0){
       c.fillStyle='#664736';c.beginPath();c.ellipse(x,y,px*1.12,py*.4,0,0,Math.PI*2);c.fill();
@@ -213,18 +214,18 @@ function render(){
     const sprite=sprites[tower?(o.lane===2?'palace':'outpost'):'piece-'+o.id];
     const unitSize=o.id==='guard'||o.id==='ram'?2.35:o.id==='bandit'?1.44:1.94;
     const width=px*(tower?(o.lane===2?4.1:2.65):unitSize),height=width*(sprite.naturalWidth?sprite.height/sprite.width:1);
-    const animated=clips[o.id]?.naturalWidth>0;
+    const animated=!tower && o.id!=='windcatcher';
     const size=px*(o.id==='ram'||o.id==='guard'?3.15:o.id==='bandit'?2.38:2.78);
     const phase=f.elapsed*10+o.phase;
     const bob=animated?(o.id==='falcon'?Math.sin(phase*.65)*px*.09:0):tower?0:(o.moving?Math.abs(Math.sin(phase))*px*.15:Math.sin(f.elapsed*3+o.phase)*px*.035);
     c.fillStyle='#29182359';c.beginPath();c.ellipse(x,y,width*.43,px*(tower?.43:.18),0,0,Math.PI*2);c.fill();
     c.strokeStyle=teamColor(o.team);c.lineWidth=tower?2:1.4;c.stroke();
-    c.save();c.translate(x,y-bob-(o.id==='falcon'?px*.7:0));if(!tower&&o.face<0)c.scale(-1,1);
+    c.save();c.translate(x,y-bob-(o.id==='falcon'?px*.7:0));
     if(!animated && !tower && o.id!=='windcatcher')c.rotate(o.attack>0?-.14*Math.sin(o.attack/.23*Math.PI):o.moving?.065*Math.sin(phase):0);
     c.globalAlpha=o.spawn>0?.5:1;
     if(animated){
       if(o.flash>.09)c.translate(-px*.075,0);
-      paintFighter(c,o,pose(o,f.elapsed),size);
+      Figures.draw(c,o,f.elapsed,size*1.16);
     }else if(o.team && o.id!=='windcatcher' && sprites.opponents.naturalWidth){
       const idx=tower?(o.lane===2?9:8):starters.indexOf(o.id);
       c.drawImage(sprites.opponents,(idx%5)*152,Math.floor(idx/5)*160,152,160,-width/2,-height,width,height);
