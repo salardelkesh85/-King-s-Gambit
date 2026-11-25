@@ -10,20 +10,11 @@ const W=18, H=32, bridges=[5,13], bank=1.35;
 const clamp=(v,low,high)=>Math.max(low,Math.min(high,v));
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function teamColor(team){return team?'#ff5261':'#35d9ff';}
-let canvas, pen, drag, hudKey='', audioContext;
-function sound(freq,duration=.09){
-  if(!audioContext || audioContext.state!=='running')return;
-  const oscillator=audioContext.createOscillator(), gain=audioContext.createGain();
-  oscillator.type='triangle';oscillator.frequency.setValueAtTime(freq,audioContext.currentTime);
-  oscillator.frequency.exponentialRampToValueAtTime(freq*.48,audioContext.currentTime+duration);
-  gain.gain.setValueAtTime(.055,audioContext.currentTime);
-  gain.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+duration);
-  oscillator.connect(gain);gain.connect(audioContext.destination);oscillator.start();oscillator.stop(audioContext.currentTime+duration);
-}
+let canvas, pen, drag, hudKey='';
 function start(drill=false){
-  try{audioContext ||= new AudioContext();audioContext.resume().catch(()=>{});}catch{}
+  BattleAudio.open();
   screen='Battle';drag=null;hudKey='';nav.style.display='none';
-  bar.innerHTML='<button id="pause" aria-label="Pause">Ⅱ</button><span>ARENA AI</span><strong id="clock">3:00</strong><b id="crowns"></b>';
+  bar.innerHTML='<button id="pause" aria-label="Pause">Ⅱ</button><button id="audio" aria-label="Battle sound"></button><strong id="clock">3:00</strong><b id="crowns"></b>';
   main.innerHTML='<section class="battle"><div class="field"><canvas class="board" aria-label="Battle arena"></canvas></div><div class="command"><div class="handrow"><aside><small>NEXT</small><img id="next" alt="Next card"></aside><div id="hand"></div></div><div class="fuel"><b id="charge"></b><div class="track"><i></i></div><span id="rate"></span></div></div></section>';
   canvas=main.querySelector('canvas');pen=canvas.getContext('2d');
   const deck=drill?['windcatcher',...starters.slice(0,7)]:profile.deck.slice();
@@ -39,7 +30,10 @@ function start(drill=false){
     play(1,0,{x:5.5,y:14.5});
     fight.ai=Infinity;fight.notice='Drop Windcatcher on the marked tile';fight.noticeUntil=6;
   }
-  bar.querySelector('button').onclick=pauseBattle;
+  const audioButton=bar.querySelector('#audio');
+  function audioLabel(){audioButton.textContent=BattleAudio.muted?'Sound off':'Sound on';audioButton.setAttribute('aria-pressed',String(!BattleAudio.muted));}
+  audioButton.onclick=()=>{BattleAudio.toggle();audioLabel();};audioLabel();
+  bar.querySelector('#pause').onclick=pauseBattle;
   for(let i=0;i<4;i++){
     const b=button('',()=>{} ,'card');b.dataset.slot=i;
     b.onpointerdown=e=>beginDrag(e,i);
@@ -93,13 +87,13 @@ function play(team,slot,p){
       life:32,speed:speed*23,range:range*28,cd:.48,spawn:.55,moving:false,phase:f.seq++*1.9,flash:0,attack:0,bridge:p.x<9?5:13,face:team?-1:1});
     burst(p,teamColor(team),.9);
   }
-  if(!team)sound(470);hud();return true;
+  if(isSpell(id))BattleAudio.play(id,p.x);else if(!team)BattleAudio.play('deploy',p.x,.55);hud();return true;
 }
 function burst(p,color,radius){fight.effects.push({x:p.x,y:p.y,color,radius,life:.42,max:.42});}
 function hit(t,damage){
   if(t.hp<=0)return;t.hp=Math.max(0,t.hp-damage);t.flash=.15;
   if(t.lane===2 || (t.lane!==undefined&&!t.hp))fight.towers.find(k=>k.team===t.team&&k.lane===2).awake=true;
-  if(!t.hp){burst(t,t.lane===undefined?'#fff0a4':'#eea45e',t.lane===undefined?.8:2.7);if(t.lane!==undefined){sound(100,.36);notice('Tower down!');}}
+  if(!t.hp){burst(t,t.lane===undefined?'#fff0a4':'#eea45e',t.lane===undefined?.8:2.7);if(t.lane!==undefined){BattleAudio.play('collapse',t.x);notice('Tower down!');}}
 }
 function crowns(team){return fight.towers.filter(t=>t.team!==team&&t.hp<=0).length;}
 function route(u,target){
@@ -131,14 +125,17 @@ function move(u,target,dt){
 }
 function attack(a,t){
   if(fight.drill&&a.team===0&&a.lane!==undefined&&t.id==='ram')fight.drillShots.add(a.lane);
+  BattleAudio.play(a.id||'tower',a.x,a.id?1:.64);
   const ranged=!a.id||['spark','echo','warden','windcatcher'].includes(a.id);
   a.cd=tacticsFor(a).interval-tacticsFor(a).windup;a.attack=.23;
   if(ranged){
     fight.shots.push({x:a.x,y:a.y-.65,t,team:a.team,id:a.id||'tower',origin:a.lane,dmg:a.dmg||28});
-  }else{hit(t,a.dmg);burst(t,'#fff2ab',.54);}
+  }else{if(structure(t))BattleAudio.play('wall',t.x,.6);hit(t,a.dmg);burst(t,'#fff2ab',.54);}
 }
 function tick(dt){
-  const f=fight;f.elapsed+=dt;f.time-=dt;
+  const f=fight;
+  for(const u of f.units){u.prevX=u.x;u.prevY=u.y;u.prevTravel=u.travel||0;}
+  f.elapsed+=dt;f.time-=dt;
   const mult=f.overtime||f.time<=60?2:1;
   for(const team of [0,1])f.mana[team]=Math.min(10,f.mana[team]+dt*mult/2.3);
   f.ai-=dt;
@@ -146,7 +143,7 @@ function tick(dt){
   for(const actor of [...f.towers,...f.units])combatStep(actor,dt);
   for(const s of f.shots){
     const d=distance(s,s.t),step=15*dt;
-    if(d<=step){s.done=true;hit(s.t,s.dmg);
+    if(d<=step){s.done=true;BattleAudio.play(structure(s.t)?'wall':'impact',s.t.x,.56);hit(s.t,s.dmg);
       if(s.id==='spark'||s.id==='echo')for(const u of f.units)if(u!==s.t&&u.team!==s.team&&distance(u,s.t)<1.5)hit(u,s.dmg*.5);
       burst(s.t,s.id==='spark'?'#ffb24c':'#a5f5ff',s.id==='spark'?1.4:.6);
     }else{s.x+=(s.t.x-s.x)*step/d;s.y+=(s.t.y-s.y)*step/d;}
@@ -200,7 +197,9 @@ function render(){
     }
   }
   for(const o of [...f.units,...f.fallen,...f.towers].sort((a,b)=>a.y-b.y)){
-    const x=o.x*px,y=o.y*py,tower=o.lane!==undefined;
+    const mix=clamp(f.banked*30,0,1);
+    const x=((o.prevX??o.x)*(1-mix)+o.x*mix)*px;
+    const y=((o.prevY??o.y)*(1-mix)+o.y*mix)*py,tower=o.lane!==undefined;
     if(o.fallAt!==undefined){
       
       const t=(f.elapsed-o.fallAt)/.33;
